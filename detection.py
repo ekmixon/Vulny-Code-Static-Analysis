@@ -44,14 +44,14 @@ def analysis(path, plain):
             regex_var_detect = "\$[\w\s]+\s?=\s?[\"|'].*[\"|']|define\([\"|'].*[\"|']\)"
             regex = re.compile(regex_var_detect , re.I)
             matches = regex.findall(content_pure)
-            
+
             # If we find a variable with a constant for a given indicator
             for vuln_content in matches:
                 if credential in vuln_content.lower():
                     payload = ["", "Hardcoded Credential", []]
                     add_vuln_var(payload, plain, path, vuln_content, content, regex_var_detect)
 
-        
+
         # High Entropy String
         content_pure = content.replace(' ', '')
         regex_var_detect = ".*?=\s?[\"|'].*?[\"|'].*?"
@@ -65,8 +65,8 @@ def analysis(path, plain):
             if shannon_entropy(vuln_content, BASE64_CHARS) >= 4.1 or \
                 shannon_entropy(vuln_content, HEX_CHARS) >= 2.5:
                 add_vuln_var(payload, plain, path, vuln_content, content, regex_var_detect)
-                
-        
+
+
         # Detection of RCE/SQLI/LFI/RFI/RFU/XSS/...
         for payload in payloads:
             regex = re.compile(payload[0] + regex_indicators)
@@ -81,8 +81,6 @@ def analysis(path, plain):
                     vuln_content[i] = vuln_content[i].replace("(PLACEHOLDER", " ")
                     vuln_content[i] = vuln_content[i].replace("PLACEHOLDER", "")
 
-                occurence = 0
-
                 # Security hole detected, is it protected ?
                 if not check_protection(payload[2], vuln_content):
                     declaration_text, line = "", ""
@@ -90,10 +88,8 @@ def analysis(path, plain):
                     # Managing multiple variable in a single line/function
                     sentence = "".join(vuln_content)
                     regex = re.compile(regex_indicators[2:-2])
-                    for vulnerable_var in regex.findall(sentence):
+                    for occurence, vulnerable_var in enumerate(regex.findall(sentence), start=1):
                         false_positive = False
-                        occurence += 1
-
                         # No declaration for $_GET, $_POST ...
                         if not check_exception(vulnerable_var[1]):
                             # Look for the declaration of $something = xxxxx
@@ -104,15 +100,18 @@ def analysis(path, plain):
 
                             # Set false positive if protection is in the variable's declaration
                             is_protected = check_protection(payload[2], declaration_text)
-                            false_positive = is_protected if is_protected else false_positive
+                            false_positive = is_protected or false_positive
 
                         # Display all the vuln
                         line_vuln = find_line_vuln(payload, vuln_content, content)
 
                         # Check for not $dest="constant"; $dest='cste'; $dest=XX;
-                        if "$_" not in vulnerable_var[1]:
-                            if "$" not in declaration_text.replace(vulnerable_var[1], ''):
-                                false_positive = True
+                        if "$_" not in vulnerable_var[
+                            1
+                        ] and "$" not in declaration_text.replace(
+                            vulnerable_var[1], ''
+                        ):
+                            false_positive = True
 
                         if not false_positive:
                             result_count = result_count + 1
@@ -122,9 +121,7 @@ def analysis(path, plain):
 # Run thru every files and subdirectories
 def recursive(dir, progress, plain):
     progress += 1
-    progress_indicator = '⬛'
-    if plain:
-        progress_indicator = "█"
+    progress_indicator = "█" if plain else '⬛'
     try:
         for name in os.listdir(dir):
 
@@ -133,9 +130,9 @@ def recursive(dir, progress, plain):
             # Targetting only PHP Files
             if os.path.isfile(os.path.join(dir, name)):
                 if ".php" in os.path.join(dir, name):
-                    analysis(dir + "/" + name, plain)
+                    analysis(f"{dir}/{name}", plain)
             else:
-                recursive(dir + "/" + name, progress, plain)
+                recursive(f"{dir}/{name}", progress, plain)
 
     except OSError as e:
         print("Error 404 - Not Found, maybe you need more right ?" + " " * 30)
@@ -146,7 +143,7 @@ def recursive(dir, progress, plain):
 def scanresults():
     global result_count
     global result_files
-    print("Found {} vulnerabilities in {} files".format(result_count, result_files))
+    print(f"Found {result_count} vulnerabilities in {result_files} files")
 
 
 
